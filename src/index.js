@@ -3,46 +3,51 @@ import ReactDOM from "react-dom/client";
 import { ZoomIn, ZoomOut } from "react-bootstrap-icons";
 import timelineItems from "./timelineItems.js";
 import assignLanes from "./assignLanes.js";
-import calculateTimeRange from "./timeRange.js";
-import calculatePosition from "./position.js";
-import calculateWidth from "./width.js";
+import calculateTimeRange from "./utils/timeRange.js";
+import calculatePosition from "./utils/position.js";
+import calculateWidth from "./utils/width.js";
 
 function App() {
   // State for zoom level (1.0 = normal, >1.0 = zoomed in, <1.0 = zoomed out)
   const [zoomLevel, setZoomLevel] = useState(1.0);
+  
+  // State for editing item names
+  const [editingItem, setEditingItem] = useState(null);
+  const [editingName, setEditingName] = useState('');
+  const [timelineData, setTimelineData] = useState(timelineItems);
 
   // Alocate items to lanes using the provided function
-  const lanes = assignLanes(timelineItems);
+  const lanes = assignLanes(timelineData);
   // Calculate the overall time range (earliest start to latest end) for all timeline items
-  const timeRange = calculateTimeRange(timelineItems);
+  const timeRange = calculateTimeRange(timelineData);
 
   // Keep timeline container width fixed
   const timelineWidth = window.innerWidth * 0.98;
   
   // Calculate the actual content width based on timeline items
   const calculateContentWidth = () => {
-    if (timelineItems.length === 0) return timelineWidth;
+    if (timelineData.length === 0) return timelineWidth;
     
     const maxPosition = Math.max(
-      ...timelineItems.map(item => {
+      ...timelineData.map(item => {
         const position = calculatePosition(item.start, timeRange, timelineWidth) * zoomLevel;
         const width = calculateWidth(item.start, item.end, timeRange, timelineWidth) * zoomLevel;
         return position + width;
       })
     );
     
-    return Math.max(timelineWidth, maxPosition + 20); // Add some padding
+    return Math.max(timelineWidth, maxPosition + 20);
   };
   
   const contentWidth = calculateContentWidth();
 
   // Zoom control functions
   const handleZoomIn = () => {
-    setZoomLevel(prev => Math.min(prev * 1.2, 2.5)); // Max zoom 5x
+    setZoomLevel(prev => Math.min(prev * 1.2, 2.5));
   };
 
   const handleZoomOut = () => {
-    setZoomLevel(prev => Math.max(prev / 1.2, 0.25)); // Min zoom 0.1x
+    setZoomLevel(prev => Math.max(prev / 1.2, 0.25));
   };
 
   const handleResetZoom = () => {
@@ -58,6 +63,42 @@ function App() {
       } else {
         handleZoomOut();
       }
+    }
+  };
+
+  // Handle double-click to start editing
+  const handleDoubleClick = (item) => {
+    setEditingItem(item.id);
+    setEditingName(item.name);
+  };
+
+  // Handle saving the edited name
+  const handleSaveEdit = () => {
+    if (editingItem && editingName.trim()) {
+      setTimelineData(prev => 
+        prev.map(item => 
+          item.id === editingItem 
+            ? { ...item, name: editingName.trim() }
+            : item
+        )
+      );
+    }
+    setEditingItem(null);
+    setEditingName('');
+  };
+
+  // Handle canceling the edit
+  const handleCancelEdit = () => {
+    setEditingItem(null);
+    setEditingName('');
+  };
+
+  // Handle Enter key to save
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      handleSaveEdit();
+    } else if (e.key === 'Escape') {
+      handleCancelEdit();
     }
   };
 
@@ -98,7 +139,6 @@ function App() {
             className="relative"
             style={{ height: `${40 * zoomLevel}px` }}
           >
-            {/* Divider line that extends to full content width */}
             {laneIndex > 0 && (
               <div 
                 className="absolute top-0 left-0 bg-neutral-200"
@@ -117,16 +157,31 @@ function App() {
                   left: `${calculatePosition(item.start, timeRange, timelineWidth) * zoomLevel}px`,
                   width: `${calculateWidth(item.start, item.end, timeRange, timelineWidth) * zoomLevel}px`,
                   height: `${30 * zoomLevel}px`,
-                  top: `${(40 * zoomLevel - 30 * zoomLevel) / 2}px`, // Center vertically in the lane
+                  top: `${(40 * zoomLevel - 30 * zoomLevel) / 2}px`,
                   display: 'flex',
                   alignItems: 'center',
                   padding: '0 4px',
                   whiteSpace: 'nowrap',
-                  textOverflow: 'ellipsis'
+                  textOverflow: 'ellipsis',
+                  cursor: 'pointer'
                 }}
-                title={`${item.name} (${item.start} to ${item.end})`}
+                title={`${item.name} (${item.start} to ${item.end}) - Double-click to edit`}
+                onDoubleClick={() => handleDoubleClick(item)}
               >
-                {item.name}
+                {editingItem === item.id ? (
+                  <input
+                    type="text"
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    onBlur={handleSaveEdit}
+                    onKeyDown={handleKeyPress}
+                    className="w-full bg-transparent text-white text-xs border-none outline-none"
+                    style={{ fontSize: `${12 * zoomLevel}px` }}
+                    autoFocus
+                  />
+                ) : (
+                  item.name
+                )}
               </div>
             ))}
           </div>
