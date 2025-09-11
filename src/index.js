@@ -8,9 +8,9 @@ import calculatePosition from "./utils/position.js";
 import calculateWidth from "./utils/width.js";
 
 function App() {
-  // State for zoom level (1.0 = normal, >1.0 = zoomed in, <1.0 = zoomed out)
+  // State for zoom level
   const [zoomLevel, setZoomLevel] = useState(1.0);
-  
+
   // State for editing item names
   const [editingItem, setEditingItem] = useState(null);
   const [editingName, setEditingName] = useState('');
@@ -23,11 +23,11 @@ function App() {
 
   // Keep timeline container width fixed
   const timelineWidth = window.innerWidth * 0.98;
-  
+
   // Calculate the actual content width based on timeline items
   const calculateContentWidth = () => {
     if (timelineData.length === 0) return timelineWidth;
-    
+
     const maxPosition = Math.max(
       ...timelineData.map(item => {
         const position = calculatePosition(item.start, timeRange, timelineWidth) * zoomLevel;
@@ -35,11 +35,56 @@ function App() {
         return position + width;
       })
     );
-    
+
     return Math.max(timelineWidth, maxPosition + 20);
   };
-  
+
   const contentWidth = calculateContentWidth();
+
+  // Generate date markers for the timeline axis
+  const generateDateMarkers = () => {
+    if (timeRange.totalDays === 0) return [];
+
+    const markers = [];
+    const startDate = new Date(timeRange.start);
+    const endDate = new Date(timeRange.end);
+
+    // Calculate minimum pixel spacing between markers to avoid overlap
+    const minPixelSpacing = 60;
+    const totalTimelineWidth = timelineWidth * zoomLevel;
+    const maxMarkers = Math.floor(totalTimelineWidth / minPixelSpacing);
+
+    // Calculate days between markers based on available space
+    const daysBetweenMarkers = Math.max(1, Math.ceil(timeRange.totalDays / maxMarkers));
+
+    // Generate markers with smart spacing
+    const usedPositions = new Set();
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + daysBetweenMarkers)) {
+      const position = calculatePosition(d, timeRange, timelineWidth) * zoomLevel;
+
+      // Check if this position is too close to existing markers
+      const tooClose = Array.from(usedPositions).some(usedPos =>
+        Math.abs(position - usedPos) < minPixelSpacing
+      );
+
+      if (!tooClose) {
+        markers.push({
+          date: new Date(d),
+          position: position,
+          label: d.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: zoomLevel < 0.3 ? '2-digit' : undefined
+          })
+        });
+        usedPositions.add(position);
+      }
+    }
+
+    return markers;
+  };
+
+  const dateMarkers = generateDateMarkers();
 
   // Zoom control functions
   const handleZoomIn = () => {
@@ -75,9 +120,9 @@ function App() {
   // Handle saving the edited name
   const handleSaveEdit = () => {
     if (editingItem && editingName.trim()) {
-      setTimelineData(prev => 
-        prev.map(item => 
-          item.id === editingItem 
+      setTimelineData(prev =>
+        prev.map(item =>
+          item.id === editingItem
             ? { ...item, name: editingName.trim() }
             : item
         )
@@ -107,7 +152,7 @@ function App() {
       onWheel={handleWheel}
     >
       {/* Zoom Controls */}
-      <div className="w-full">
+      <div className="w-full flex gap-4">
         <div className="mb-4 flex gap-2">
           <button
             onClick={handleResetZoom}
@@ -128,23 +173,61 @@ function App() {
             <ZoomIn />
           </button>
         </div>
+        <div
+          className="px-3 py-1 bg-gray-100 rounded text-sm h-fit text-gray-600"
+        >
+          Double-click to edit a item
+        </div>
       </div>
 
       <div
         className="relative flex flex-col border border-neutral-200 rounded-sm overflow-x-auto"
         style={{ width: `${timelineWidth}px`, height: '600px' }}
       >
+        {/* Date Axis */}
+        <div
+          className="relative bg-gray-50 border-b border-neutral-200"
+          style={{ height: '40px', width: `${contentWidth}px` }}
+        >
+          {dateMarkers.map((marker, index) => (
+            <div key={index} className="absolute top-0">
+              {/* Vertical line */}
+              <div
+                className="bg-neutral-300"
+                style={{
+                  position: 'absolute',
+                  left: `${marker.position}px`,
+                  top: '0px',
+                  width: '1px',
+                  height: '40px'
+                }}
+              />
+              {/* Date label */}
+              <div
+                className="absolute text-xs text-gray-600 bg-gray-50 px-1"
+                style={{
+                  left: `${marker.position}px`,
+                  top: '8px',
+                  transform: 'translateX(-50%)',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                {marker.label}
+              </div>
+            </div>
+          ))}
+        </div>
         {lanes.map((lane, laneIndex) => (
           <div key={laneIndex}
             className="relative"
             style={{ height: `${40 * zoomLevel}px` }}
           >
             {laneIndex > 0 && (
-              <div 
+              <div
                 className="absolute top-0 left-0 bg-neutral-200"
-                style={{ 
-                  width: `${contentWidth}px`, 
-                  height: '1px' 
+                style={{
+                  width: `${contentWidth}px`,
+                  height: '1px'
                 }}
               />
             )}
